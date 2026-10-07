@@ -1,0 +1,27 @@
+name: cinema-loyalty-tests
+services:
+  postgres-test:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: loyalty_test
+      POSTGRES_USER: loyalty_test
+      POSTGRES_PASSWORD: loyalty_test
+    ports:
+      - "127.0.0.1:55435:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U loyalty_test -d loyalty_test" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  tests:
+    build: .
+    environment:
+      JWT_SECRET: test-secret-for-loyalty-at-least-32-characters
+      INTERNAL_API_TOKEN: test-internal-token
+      TEST_DATABASE_URL: postgresql+psycopg://loyalty_test:loyalty_test@postgres-test:5432/loyalty_test
+    command: [ "pytest", "-q", "-o", "cache_dir=/tmp/loyalty-pytest-cache" ]
+    depends_on:
+      postgres-test:
+        condition: service_healthy
