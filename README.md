@@ -2,7 +2,7 @@
 
 [Ссылка на репозиторий](https://github.com/nyutamaksimova/graduate_work)
 
-FastAPI + PostgreSQL
+FastAPI + PostgreSQL + Redis
 
 Реализованы покупка по тарифу,
 фиксированная цена по коду, триал, процентная скидка, ограничения срока и числа
@@ -33,3 +33,17 @@ FastAPI + PostgreSQL
 | POST /api/v1/admin/payments/{order_id}/resolve | succeeded/failed для тестовой оплаты               |
 | GET /api/v1/admin/promo-attempts               | Журнал; фильтры user_id, error_code, limit, offset |
 | GET /internal/v1/users/{id}/entitlements       | Проверка доступа с X-Service-Token                 |
+
+## Защита от перебора промокодов
+
+Preview, создание заказа с кодом и административное применение расходуют один
+общий бюджет в Redis. Настройки (задаются через .env):
+
+| Настройка                    | По умолчанию                       |
+|------------------------------|------------------------------------|
+| PROMO_USER_LIMIT             | 10 попыток на пользователя за окно |
+| PROMO_IP_LIMIT               | 30 попыток на IP за окно           |
+| PROMO_WINDOW_SECONDS         | 60 секунд                          |
+| PROMO_FAILURE_THRESHOLD      | 5 отказов по промокоду             |
+| PROMO_FAILURE_WINDOW_SECONDS | 300 секунд                         |
+| PROMO_BLOCK_SECONDS          | 900 секунд блокировки              |

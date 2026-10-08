@@ -1,13 +1,15 @@
 import secrets
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from loyalty_service.errors import DomainError
 from loyalty_service.models import AuditLog, Plan, PromoAttempt, PromoCode, PromoRedemption, utcnow
 from .rules import calculate_price, normalize_code, validate_code
 
-USED = ('RESERVED', 'APPLIED')
+
+def _limit_reached(session, query, limit):
+    return session.scalar(query.offset(limit - 1).limit(1)) is not None
 
 
 def get_plan(session, plan_id):
@@ -17,17 +19,19 @@ def get_plan(session, plan_id):
     return plan
 
 
-def check_limits(session, code, user_id):
-    query = select(func.count()).select_from(PromoRedemption).where(
-        PromoRedemption.promo_code_id == code.id, PromoRedemption.status.in_(USED))
-    total = session.scalar(query)
-    if code.max_redemptions is not None and total >= code.max_redemptions:
+def check_limits(session, code, user_id, now=None):
+    now = now or utcnow()
+    used = or_(PromoRedemption.status == 'APPLIED', and_(
+        PromoRedemption.status == 'RESERVED', PromoRedemption.expires_at > now))
+    query = select(PromoRedemption.id).where(
+        PromoRedemption.promo_code_id == code.id, used)
+    if code.max_redemptions is not None and _limit_reached(session, query, code.max_redemptions):
         raise DomainError('PROMO_LIMIT_REACHED', 'Общий лимит промокода исчерпан')
-    if session.scalar(query.where(PromoRedemption.user_id == user_id)) >= code.per_user_limit:
+    if _limit_reached(session, query.where(PromoRedemption.user_id == user_id), code.per_user_limit):
         raise DomainError('PROMO_USER_LIMIT_REACHED', 'Вы уже использовали этот промокод')
     if code.benefit_type == 'TRIAL':
         trial = session.scalar(select(PromoRedemption.id).join(PromoCode).where(
-            PromoRedemption.user_id == user_id, PromoRedemption.status.in_(USED),
+            PromoRedemption.user_id == user_id, used,
             PromoCode.benefit_type == 'TRIAL').limit(1))
         if trial:
             raise DomainError('TRIAL_ALREADY_USED', 'Пробный период уже использован')
@@ -41,7 +45,7 @@ def preview(session, user_id, plan_id, code_value, now=None, locked=False):
     code = session.scalar(query)
     now = now or utcnow()
     validate_code(code, plan_id, user_id, now)
-    check_limits(session, code, user_id)
+    check_limits(session, code, user_id, now)
     return plan, code, {
         'base_price_kopecks': plan.price_kopecks,
         'final_price_kopecks': calculate_price(plan.price_kopecks, code.benefit_type, code.benefit_value),

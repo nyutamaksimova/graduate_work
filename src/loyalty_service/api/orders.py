@@ -9,12 +9,17 @@ from loyalty_service.errors import DomainError
 from loyalty_service.orders.schemas import OrderInput
 from loyalty_service.orders.service import create_order, get_order
 from loyalty_service.promotions.service import record_attempt
+from loyalty_service.promo_guard import admit_promo, rejected_promo
 from .common import serialize
 
 router = APIRouter(prefix='/api/v1/orders', tags=['Orders'])
 
 
 def submit_order(session, request, payload, key, user_id, actor_id, reason=None):
+    if payload.promo_code:
+        # Use the caller, including an administrator applying on behalf of
+        # others: changing the target user must not grant a fresh budget.
+        admit_promo(request, actor_id)
     try:
         order, created = create_order(session, user_id, payload, key, actor_id, reason,
             request.app.state.settings.reservation_minutes)
@@ -27,6 +32,7 @@ def submit_order(session, request, payload, key, user_id, actor_id, reason=None)
         if payload.promo_code:
             record_attempt(session, user_id, payload.promo_code, False, exc.code, request.state.request_id)
             session.commit()
+            rejected_promo(request, actor_id, exc.code)
         raise
 
 

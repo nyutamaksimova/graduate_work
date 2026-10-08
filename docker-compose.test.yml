@@ -1,5 +1,15 @@
 name: cinema-loyalty-tests
 services:
+  redis-test:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:56386:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   postgres-test:
     image: postgres:16
     environment:
@@ -11,7 +21,7 @@ services:
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U loyalty_test -d loyalty_test" ]
+      test: ["CMD-SHELL", "pg_isready -U loyalty_test -d loyalty_test"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -21,7 +31,10 @@ services:
       JWT_SECRET: test-secret-for-loyalty-at-least-32-characters
       INTERNAL_API_TOKEN: test-internal-token
       TEST_DATABASE_URL: postgresql+psycopg://loyalty_test:loyalty_test@postgres-test:5432/loyalty_test
-    command: [ "pytest", "-q", "-o", "cache_dir=/tmp/loyalty-pytest-cache" ]
+      TEST_REDIS_URL: redis://redis-test:6379/0
+    command: ["pytest", "-q", "-o", "cache_dir=/tmp/loyalty-pytest-cache"]
     depends_on:
+      redis-test:
+        condition: service_healthy
       postgres-test:
         condition: service_healthy

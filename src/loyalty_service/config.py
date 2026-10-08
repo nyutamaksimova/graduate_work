@@ -13,3 +13,10 @@ class Settings(BaseSettings):
     payment_mode: Literal['mock'] = 'mock'
     enable_mock_payment_control: bool = False
     reservation_minutes: int = Field(default=15, ge=1, le=60)
+    redis_url: str = 'redis://localhost:6385/0'
+    promo_user_limit: int = Field(default=10, ge=1)
+    promo_ip_limit: int = Field(default=30, ge=1)
+    promo_window_seconds: int = Field(default=60, ge=1)
+    promo_failure_threshold: int = Field(default=5, ge=1)
+    promo_failure_window_seconds: int = Field(default=300, ge=1)
+    promo_block_seconds: int = Field(default=900, ge=1)

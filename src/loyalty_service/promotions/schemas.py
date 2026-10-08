@@ -23,8 +23,8 @@ class BenefitInput(StrictModel):
     valid_from: AwareDatetime | None = None
     valid_until: AwareDatetime | None = None
     active: bool = True
-    max_redemptions: int | None = Field(default=None, gt=0, strict=True)
-    per_user_limit: int = Field(default=1, gt=0, strict=True)
+    max_redemptions: int | None = Field(default=None, gt=0, le=2147483647, strict=True)
+    per_user_limit: int = Field(default=1, gt=0, le=2147483647, strict=True)
     plan_id: UUID | None = None
     assigned_user_id: UUID | None = None
 

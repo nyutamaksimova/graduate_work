@@ -8,6 +8,7 @@ from loyalty_service.errors import DomainError
 from loyalty_service.models import Plan, utcnow
 from loyalty_service.promotions.schemas import PreviewInput
 from loyalty_service.promotions.service import preview, record_attempt
+from loyalty_service.promo_guard import admit_promo, rejected_promo
 from .common import serialize
 
 router = APIRouter(prefix='/api/v1', tags=['Promotions'])
@@ -21,6 +22,7 @@ def plans(session: Session = Depends(get_session)):
 @router.post('/promocodes/preview')
 def preview_code(payload: PreviewInput, request: Request, user: Principal = Depends(get_current_user),
                  session: Session = Depends(get_session)):
+    admit_promo(request, user.user_id)
     try:
         _, _, result = preview(session, user.user_id, payload.plan_id, payload.code, utcnow())
         record_attempt(session, user.user_id, payload.code, True, None, request.state.request_id)
@@ -30,4 +32,5 @@ def preview_code(payload: PreviewInput, request: Request, user: Principal = Depe
         session.rollback()
         record_attempt(session, user.user_id, payload.code, False, exc.code, request.state.request_id)
         session.commit()
+        rejected_promo(request, user.user_id, exc.code)
         raise

@@ -12,15 +12,17 @@ from .api import admin, orders, payments, promotions, subscriptions
 from .config import Settings
 from .db import get_session, make_sessions
 from .errors import DomainError
+from .promo_guard import PromoGuard
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None, sessions=None) -> FastAPI:
+def create_app(settings: Settings | None = None, sessions=None, promo_guard=None) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title='Cinema Loyalty Service', version='0.1.0')
     app.state.settings = settings
     app.state.sessions = sessions or make_sessions(settings.database_url)
+    app.state.promo_guard = promo_guard if promo_guard is not None else PromoGuard.from_settings(settings)
 
     @app.middleware('http')
     async def request_id(request: Request, call_next):
@@ -31,7 +33,7 @@ def create_app(settings: Settings | None = None, sessions=None) -> FastAPI:
 
     @app.exception_handler(DomainError)
     async def domain_error(request: Request, exc: DomainError):
-        return JSONResponse(status_code=exc.status_code, content={'error': {
+        return JSONResponse(status_code=exc.status_code, headers=exc.headers, content={'error': {
             'code': exc.code, 'message': exc.message, 'request_id': request.state.request_id}})
 
     @app.exception_handler(RequestValidationError)
@@ -43,6 +45,7 @@ def create_app(settings: Settings | None = None, sessions=None) -> FastAPI:
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError):
+        # Do not log exception text: SQL parameters may contain personal data.
         logger.error('database_error request_id=%s type=%s', request.state.request_id, type(exc).__name__)
         return JSONResponse(status_code=503, content={'error': {'code': 'DATABASE_UNAVAILABLE',
             'message': 'Ошибка хранилища; повторите запрос с тем же Idempotency-Key',
